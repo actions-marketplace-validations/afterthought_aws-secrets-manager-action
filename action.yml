@@ -5,6 +5,10 @@ inputs:
   secrets:
     description: 'List of secret names you want to fetch secret values for'
     required: true
+  mapped-secrets:
+    description: 'List of mapped secret options. I.e. [{"prefix": "MY_", "secret": "secret_name"}]. JSON keys from secret are mapped using prefix to env variables.'
+    required: true
+    default: '[]'
   parse-json:
     description: 'If true and secret values are stringified JSON objects, they will be parsed and flattened. Its key value pairs will become individual secrets'
     required: false

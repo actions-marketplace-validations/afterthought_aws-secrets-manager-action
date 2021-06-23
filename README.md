@@ -16,32 +16,35 @@ For example:
 ## Usage
 ```yaml
 steps:
+- name: Configure AWS Credentials
+  uses: aws-actions/configure-aws-credentials@v1
+  with:
+    aws-access-key-id: XXX
+    aws-secret-access-key: XXX
+    aws-region: us-east-1
 - name: Read secrets from AWS Secrets Manager into environment variables
   uses: abhilash1in/aws-secrets-manager-action@v1.0.1
   with:
-    aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    aws-region: ${{ secrets.AWS_REGION }}
     secrets: |
       my_secret_1
       app1/dev/*
+    mapped-secrets: |
+      [
+        {
+          "prefix": "DB_",
+          "secret": "MY_DB_SECRET"
+        }
+      ]
     parse-json: true
 
-- name: Check if env variable is set after fetching secrets
-  run: if [ -z ${MY_SECRET_1+x} ]; then echo "MY_SECRET_1 is unset"; else echo "MY_SECRET_1 is set to '$MY_SECRET_1'"; fi
+- name: Print env
+  run: |
+    env | grep MY_
+    env | grep DB_
+
+    # DB_HOST=xyz.com
+    # MY_SECRET_1=secret
 ```
-- `aws-access-key-id`
-  - Access Key ID of an IAM user with the required [AWS Secrets Manager permissions](#iam-policy).
-  - Empty string can be used ONLY IF you are using a self-hosted GitHub Actions Runner on AWS EC2 instances with an IAM instance profile attached (should have the required [AWS Secrets Manager permissions](#iam-policy)).
-- `aws-secret-access-key`
-  - Corresponding Secret Access Key of the IAM user.
-  - Empty string can be used ONLY IF you are using a self-hosted GitHub Actions Runner on AWS EC2 instances with an IAM instance profile attached (should have the required [AWS Secrets Manager permissions](#iam-policy)).
-- `aws-session-token`
-  - Corresponding Session Token for the IAM user's current session.
-  - Optional (required ONLY IF you are using [AWS IAM temporary credentials](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_use-resources.html)).
-- `aws-region`
-  - AWS region code which has your AWS Secrets Manager secrets.
-  - Example: `us-east-1`.
 - `secrets`: 
   - List of secret names to be retrieved.
   - Examples:
@@ -58,6 +61,20 @@ steps:
         *dev*
         app1/dev/*
       ```
+- `mapped-secrets`: 
+  - List of secret names with prefixes. This feature works with a ignores the secret name and instead maps each JSON field for json secrets to an ENV var using the prefix.
+  - Examples:
+      ```yaml
+      mapped-secrets: |
+        [
+          {
+            "prefix": "DB_",
+            "secret": "MY_DB_SECRET"
+          }
+        ]
+      ```
+    This results in an environment variable for each json field prefixed with DB. I.e. DB_HOST and DB_PASSWORD.
+      
 - `parse-json`
   - If `parse-json: true` and secret value is a **valid** stringified JSON object, it will be parsed and flattened. Each of the key value pairs in the flattened JSON object will become individual secrets. The original secret name will be used as a prefix.
   - Examples: 

@@ -3,8 +3,10 @@ import { SecretsManager } from 'aws-sdk'
 import { Inputs } from './constants'
 import { flattenJSONObject, isJSONObjectString, filterBy, getPOSIXString } from './utils'
 
+type MappedSecret = { prefix: string, secret: string}
 // secretNames input string is a new line separated list of secret names. Take distinct secret names.
 const inputSecretNames: string[] = [...new Set(core.getInput(Inputs.SECRETS).split('\n').filter(x => x !== ''))]
+const inputMappedSecrets: MappedSecret[] = JSON.parse(core.getInput(Inputs.MAPPED_SECRETS))
 // Check if any secret name contains a wildcard '*'
 const hasWildcard: boolean = inputSecretNames.some(secretName => secretName.includes('*'))
 const shouldParseJSON = (core.getInput(Inputs.PARSE_JSON).trim().toLowerCase() === 'true')
@@ -104,6 +106,66 @@ const getSecretValueMap = (secretsManagerClient: SecretsManager, secretName: str
   })
 }
 
+const getMappedSecretValueMap = (secretsManagerClient: SecretsManager, mappedSecret: MappedSecret) => {
+  return new Promise((resolve, reject) => {
+    getSecretValue(secretsManagerClient, mappedSecret.secret)
+      .then(data => {
+        let secretValue
+        // Decrypts secret using the associated KMS CMK.
+        // Depending on whether the secret is a string or binary, one of these fields will be populated.
+        if ('SecretString' in data) {
+          secretValue = data['SecretString']
+        } else {
+          const buff = Buffer.from(data['SecretBinary'].toString(), 'base64')
+          secretValue = buff.toString('ascii')
+        }
+        let secretValueMap = {}
+
+        // If secretName = 'mySecret' and secretValue='{ "foo": "bar" }'
+        // and if secretValue is a valid JSON object string and shouldParseJSON = true,
+        // injected secrets will be of the form 'mySecret.foo' = 'bar'
+        if (isJSONObjectString(secretValue)) {
+          const secretJSON = JSON.parse(secretValue)
+          const secretJSONWrapped = {}
+          secretJSONWrapped[mappedSecret.prefix] = secretJSON
+          const secretJSONFlattened = flattenJSONObject(secretJSONWrapped)
+          secretValueMap = secretJSONFlattened
+        }
+        // Else, injected secrets will be of the form 'mySecret' = '{ "foo": "bar" }' (raw secret value string)
+        else {
+          secretValueMap[mappedSecret.prefix] = secretValue
+        }
+        resolve(secretValueMap)
+      })
+      .catch(err => {
+        if ('code' in err) {
+          if (err.code === 'DecryptionFailureException')
+            // Secrets Manager can't decrypt the protected secret text using the provided KMS key.
+            // Deal with the exception here, and/or rethrow at your discretion.
+            reject(err)
+          else if (err.code === 'InternalServiceErrorException')
+            // An error occurred on the server side.
+            // Deal with the exception here, and/or rethrow at your discretion.
+            reject(err)
+          else if (err.code === 'InvalidParameterException')
+            // You provided an invalid value for a parameter.
+            // Deal with the exception here, and/or rethrow at your discretion.
+            reject(err)
+          else if (err.code === 'InvalidRequestException')
+            // You provided a parameter value that is not valid for the current state of the resource.
+            // Deal with the exception here, and/or rethrow at your discretion.
+            reject(err)
+          else if (err.code === 'ResourceNotFoundException')
+            // We can't find the resource that you asked for.
+            // Deal with the exception here, and/or rethrow at your discretion.
+            reject(err)
+        } else {
+          reject(err)
+        }
+      })
+  })
+}
+
 const getSecretNamesToFetch =
   (secretsManagerClient: SecretsManager, inputSecretNames: string[]): Promise<Array<string>> => {
     return new Promise<Array<string>>((resolve, reject) => {
@@ -170,6 +232,15 @@ if (hasWildcard) {
   })
 }
 
+inputMappedSecrets.forEach((mappedSecret) => {
+  getMappedSecretValueMap(secretsManagerClient, mappedSecret)
+    .then(map => {
+      injectSecretValueMapToEnvironment(map, core)
+    })
+    .catch(err => {
+      core.setFailed(`Action failed with error: ${err}`)
+    })
+})
 export {
   getSecretValue,
   listSecrets,

@@ -11,9 +11,7 @@ config({ path: resolve(__dirname, "../.env") })
 
 // In case we want to make actual AWS calls during integration tests instead of jest mock calls
 const AWSConfig = {
-  accessKeyId: process.env[getPOSIXString(Inputs.AWS_ACCESS_KEY_ID)],
-  secretAccessKey: process.env[getPOSIXString(Inputs.AWS_SECRET_ACCESS_KEY)],
-  region: process.env[getPOSIXString(Inputs.AWS_REGION)]
+
 }
 
 const secretsManagerClient = new SecretsManager(AWSConfig)
