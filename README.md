@@ -31,7 +31,7 @@ steps:
     mapped-secrets: |
       [
         {
-          "prefix": "DB_",
+          "prefix": "DB",
           "secret": "MY_DB_SECRET"
         }
       ]
@@ -68,7 +68,7 @@ steps:
       mapped-secrets: |
         [
           {
-            "prefix": "DB_",
+            "prefix": "DB",
             "secret": "MY_DB_SECRET"
           }
         ]
